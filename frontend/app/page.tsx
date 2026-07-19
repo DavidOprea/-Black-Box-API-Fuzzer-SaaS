@@ -15,7 +15,7 @@ export default function Home() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // const lastLogCountRef = useRef<number>(0);
 
   // Submit fuzzing job
@@ -53,10 +53,11 @@ export default function Home() {
 
   // Poll job status
   const startPolling = (id: string) => {
-    const interval = setInterval(() => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+
+    pollIntervalRef.current = setInterval(() => {
       pollStatus(id);
     }, 3000);
-    setPollInterval(interval);
   };
 
   const pollStatus = async (id: string) => {
@@ -97,14 +98,14 @@ export default function Home() {
           ]);
         }
 
-        if (pollInterval) clearInterval(pollInterval);
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       } else if (response.status === TaskStatus.FAILED) {
         setAppState("error");
         setTerminalLines((prev) => [
           ...prev,
           `[!] Fuzzing failed: ${response.error}`,
         ]);
-        if (pollInterval) clearInterval(pollInterval);
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -122,7 +123,7 @@ export default function Home() {
       setTaskId(null);
       setStatus(null);
       setTerminalLines([]);
-      if (pollInterval) clearInterval(pollInterval);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       setTerminalLines((prev) => [...prev, `[!] Cancel failed: ${message}`]);
@@ -132,9 +133,9 @@ export default function Home() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (pollInterval) clearInterval(pollInterval);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [pollInterval]);
+  }, []);
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4 sm:px-6 lg:px-8">
@@ -206,6 +207,7 @@ export default function Home() {
                   setTaskId(null);
                   setStatus(null);
                   setTerminalLines([]);
+                  if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
               >
