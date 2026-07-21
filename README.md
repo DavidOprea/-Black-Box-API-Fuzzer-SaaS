@@ -1,309 +1,106 @@
-# Black-Box Fuzzer SaaS
-
-A modern, async-polling API fuzzer that tests staging APIs for 5xx server errors using OpenAPI/Swagger specifications.
-
-## Features
-
-✅ **OpenAPI/Swagger Integration** — Load specifications via URL
-✅ **5xx Error Detection** — Focus on server errors, ignore client errors
-✅ **Rate Limiting & Concurrency Control** — Respect API limits, avoid WAF triggers
-✅ **Real-time Polling** — Live progress updates every 3 seconds
-✅ **Reproducible Crashes** — cURL commands for each crash found
-✅ **API Key Injection** — Support for authenticated APIs
-✅ **Live Terminal Output** — Watch fuzzing in real-time
-
-## Tech Stack
-
-- **Frontend:** Next.js 14 + React 18 + Tailwind CSS
-- **Backend:** FastAPI + Uvicorn
-- **Queue:** Celery + Redis
-- **Fuzzer:** Schemathesis
-- **Container:** Docker Compose
-
-## Quick Start
-
+# Black-Box API Fuzzer
+ 
+A containerized DevSecOps testing utility designed to stress-test APIs and uncover edge-case 5xx server errors before public deployment. This fuzzer consumes OpenAPI specifications and leverages property-based testing to automatically generate and execute thousands of mutated HTTP requests against target endpoints.
+ 
+## Architecture
+ 
+This project is built with a decoupled, asynchronous microservices architecture to ensure the UI remains responsive during long-running fuzzing campaigns:
+ 
+* **Frontend:** Next.js (React)
+* **Backend:** FastAPI (Python)
+* **Task Queue:** Celery
+* **Message Broker & Cache:** Redis
+* **Fuzzing Engine:** Schemathesis
+## Getting Started
+ 
 ### Prerequisites
-
-- Docker & Docker Compose
-- Node.js 18+ (for local frontend development)
-- Python 3.11+ (for local backend development)
-
-### Using Docker Compose (Recommended)
-
+ 
+* Docker & Docker Compose
+* (Optional) Python 3.10+ and Node.js if running manually
+### Installation via Docker Compose (Recommended)
+ 
+The easiest way to spin up the entire stack is using Docker Compose. This ensures Redis, the FastAPI backend, the Celery worker, and the Next.js frontend are correctly networked.
+ 
 ```bash
-# Clone and enter project
-cd black-box-fuzzer
-
-# Start all services
-docker-compose up -d
-
-# Wait for services to initialize (30 seconds)
-sleep 30
-
-# Access the application
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:8000/docs
-# Redis: localhost:6379
+# Clone the repository
+git clone https://github.com/your-username/black-box-api-fuzzer.git
+cd black-box-api-fuzzer
+ 
+# Build and spin up the containers
+docker-compose up --build
 ```
-
-**Stopping services:**
+ 
+The services will be available at:
+ 
+* Frontend UI: `http://localhost:3000`
+* Backend API: `http://localhost:8000`
+### Manual Setup (Development)
+ 
+If you need to run the services bare-metal for debugging:
+ 
+1. Start Redis:
 ```bash
-docker-compose down
+redis-server
 ```
-
-### Local Development (Manual Setup)
-
-#### 1. Backend Setup
-
+ 
+2. Start the Backend (FastAPI):
 ```bash
 cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Copy environment file
-cp .env.example .env
-
-# Start Redis (requires separate installation or Docker)
-redis-server
-
-# In another terminal, start FastAPI
-uvicorn app.api:app --reload
-
-# In another terminal, start Celery worker
-celery -A app.worker worker --loglevel=info
+uvicorn main:app --reload --port 8000
 ```
-
-#### 2. Frontend Setup
-
+ 
+3. Start the Celery Worker:
+```bash
+cd backend
+celery -A worker.celery_app worker --loglevel=info
+```
+ 
+4. Start the Frontend:
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Copy environment file
-cp .env.local.example .env.local
-
-# Start Next.js dev server
 npm run dev
 ```
-
-Access frontend at `http://localhost:3000`
-
-## API Endpoints
-
-### Submit Fuzzing Job
-```bash
-POST /fuzz
-Content-Type: application/json
-
-{
-  "target_openapi_url": "https://api.example.com/v1/openapi.json",
-  "api_key_header": "X-API-Key",
-  "api_key_value": "sk-1234567890",
-  "consent_acknowledged": true
-}
+ 
+## Network Troubleshooting: Fuzzing `localhost`
+ 
+By default, Docker containers run in isolated networks. If you are using this tool to fuzz an API that is currently running on your host machine's `localhost` (e.g., a local staging environment), the fuzzer container will not be able to reach it via `http://localhost`.
+ 
+**The Fix:** Use `host.docker.internal` as the target domain.
+ 
+When submitting a fuzzing job through the UI, if your target API is running on port `5000` of your host machine, set the target URL to:
+ 
 ```
-
-**Response:**
-```json
-{
-  "task_id": "abc-123-def",
-  "status": "pending",
-  "message": "Fuzzing job abc-123-def queued..."
-}
+http://host.docker.internal:5000/openapi.json
 ```
-
-### Poll Job Status
-```bash
-GET /status/{task_id}
-```
-
-**Response:**
-```json
-{
-  "task_id": "abc-123-def",
-  "status": "running",
-  "progress_percent": 45,
-  "total_tests_run": 225,
-  "total_crashes": 3,
-  "crashes": [
-    {
-      "method": "POST",
-      "path": "/users",
-      "status_code": 500,
-      "curl_command": "curl -X POST ..."
-    }
-  ],
-  "curl_commands": ["curl -X POST ...", "curl -X GET ..."],
-  "message": "Fuzzing in progress..."
-}
-```
-
-### Cancel Job
-```bash
-POST /cancel/{task_id}
-```
-
-### Health Check
-```bash
-GET /health
-```
-
-### Statistics
-```bash
-GET /stats
-```
-
-## Configuration
-
-### Backend Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REDIS_URL` | `redis://localhost:6379` | Redis connection URL |
-| `CELERY_BROKER_URL` | `redis://localhost:6379/0` | Celery broker |
-| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | Celery results backend |
-| `API_TIMEOUT` | `300` | Fuzzing timeout (seconds) |
-| `CONCURRENCY_LIMIT` | `20` | Max concurrent tests |
-| `RATE_LIMIT_RPS` | `10.0` | Requests per second |
-| `MAX_FAILURES` | `100` | Max failures before stopping |
-
-### Frontend Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend API URL |
-
-## Project Structure
-
-```
-.
-├── backend/
-│   ├── app/
-│   │   ├── api.py              # FastAPI application
-│   │   ├── worker.py           # Celery tasks
-│   │   ├── schemas.py          # Pydantic models
-│   │   └── __init__.py
-│   ├── requirements.txt
-│   ├── .env.example
-│   └── Dockerfile
-│
-├── frontend/
-│   ├── app/
-│   │   ├── page.tsx            # Main page
-│   │   ├── layout.tsx
-│   │   └── globals.css
-│   ├── components/
-│   │   ├── FuzzerForm.tsx       # Input form
-│   │   ├── Dashboard.tsx        # Results display
-│   │   ├── ProgressBar.tsx
-│   │   ├── TerminalOutput.tsx
-│   │   └── StatusPoller.tsx
-│   ├── lib/
-│   │   ├── api.ts              # API client
-│   │   └── types.ts            # TypeScript types
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── Dockerfile
-│
-├── docker-compose.yml
-└── README.md
-```
-
-## Key Features Explained
-
-### Async Polling Flow
-
-1. **Form Submission** — User submits OpenAPI URL + consent
-2. **Job Enqueue** — FastAPI validates and enqueues Celery task
-3. **Immediate Response** — Returns `task_id` for polling
-4. **Real-time Polling** — Frontend polls `GET /status/{task_id}` every 3 seconds
-5. **Progress Updates** — Celery worker updates Redis with progress
-6. **Results Display** — Dashboard shows crashes + cURL commands when complete
-
-### Schemathesis Integration
-
-- **Schema Loading** — `schemathesis.openapi.from_uri()`
-- **Test Generation** — Automatic test case generation from OpenAPI spec
-- **5xx Filtering** — Only report 500-599 status codes
-- **Rate Limiting** — Configurable RPS to avoid WAF triggers
-- **Header Injection** — Automatic API key injection
-
-### Security
-
-- ✅ Mandatory ownership acknowledgment
-- ✅ No password storage (API keys expire per-session)
-- ✅ Rate limiting prevents WAF blocks
-- ✅ Timeout protection (5 minutes default)
-- ⚠️ **Warning:** Only run on APIs you own/control
-
-## Development Workflow
-
-### Adding New Features
-
-1. **Backend changes** → Edit `backend/app/`
-2. **Frontend changes** → Edit `frontend/app/` or `components/`
-3. **Docker changes** → Rebuild with `docker-compose up --build`
-
-### Debugging
-
-**Backend logs:**
-```bash
-docker-compose logs -f api
-docker-compose logs -f worker
-```
-
-**Frontend logs:**
-```bash
-docker-compose logs -f frontend
-```
-
-**Redis CLI:**
-```bash
-docker-compose exec redis redis-cli
-```
-
-## Future Enhancements
-
-- [ ] User authentication & project management
-- [ ] Scheduled fuzzing runs
-- [ ] Detailed crash analysis & deduplication
-- [ ] Integration with bug tracking (Jira, GitHub)
-- [ ] Custom mutation strategies
-- [ ] Database persistence for results
-- [ ] WebSocket support for real-time updates
-- [ ] Batch API testing
-
-## Troubleshooting
-
-### Redis connection errors
-```bash
-# Ensure Redis is running
-docker-compose up redis -d
-
-# Check Redis health
-docker-compose exec redis redis-cli ping
-```
-
-### Celery worker not picking up tasks
-```bash
-# Check worker logs
-docker-compose logs -f worker
-
-# Restart worker
-docker-compose restart worker
-```
-
-### Frontend can't reach backend
-- Verify `NEXT_PUBLIC_API_URL` is correct
-- Check backend is running: `curl http://localhost:8000/health`
-- Check CORS settings in `backend/app/api.py`
+ 
+This tells the Docker container to route the malicious payloads out of the container network and directly to your host machine's local ports specified on the OpenAPI JSON files.
+ 
+## API Documentation
+ 
+The FastAPI backend exposes the following primary endpoints for integration:
+ 
+### `POST /api/fuzz/start`
+ 
+Initiates a new asynchronous fuzzing campaign.
+ 
+* **Payload:** `{ "openapi_url": "https://...", "target_url": "http://..." }`
+* **Response:** `{ "task_id": "uuid-string" }`
+### `GET /api/fuzz/status/{task_id}`
+ 
+Polls the current status and metrics of a running fuzzing campaign.
+ 
+* **Response:** `{ "status": "running", "payloads_sent": 1450, "errors_found": 2 }`
+### `POST /api/fuzz/cancel/{task_id}`
+ 
+Terminates an ongoing Celery worker task.
+ 
+## Future Roadmap
+ 
+* File upload support for local OpenAPI/Swagger JSON specifications
+* Persistent test campaign history
+* Exportable PDF/HTML vulnerability reports
 
 ## License
 
