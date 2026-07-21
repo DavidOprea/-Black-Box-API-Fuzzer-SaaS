@@ -89,7 +89,7 @@ def fuzz_api_task(self, target_openapi_url: str, header_name=None, header_value=
         })
     
     return {
-        "total_tests": 100, 
+        "total_tests": tests_completed, 
         "total_crashes": len(clean_curls),
         "crashes": crashes
     }
