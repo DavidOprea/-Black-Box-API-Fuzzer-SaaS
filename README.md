@@ -23,8 +23,8 @@ The easiest way to spin up the entire stack is using Docker Compose. This ensure
  
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/black-box-api-fuzzer.git
-cd black-box-api-fuzzer
+git clone https://github.com/DavidOprea/Black-Box-API-Fuzzer
+cd Black-Box-API-Fuzzer
  
 # Build and spin up the containers
 docker-compose up --build
